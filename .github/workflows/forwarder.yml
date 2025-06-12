@@ -2,15 +2,16 @@ name: Telegram Message Forwarder
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
-    paths:
-      - 'next_run.txt'
+  repository_dispatch:
+    types: [run_forwarder]
+  schedule:
+    # بک‌آپ cron (اگه کار کرد)
+    - cron: '*/10 * * * *'
 
 jobs:
   forward:
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 9  # حداکثر 9 دقیقه اجرا
     
     permissions:
       contents: write
@@ -34,21 +35,15 @@ jobs:
           SESSION_STRING: ${{ secrets.SESSION_STRING }}
           SOURCE_CHANNELS: ${{ secrets.SOURCE_CHANNELS }}
           DESTINATION_CHANNEL: ${{ secrets.DESTINATION_CHANNEL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           timeout 540 python main.py || echo "Script completed or timed out"
 
-      - name: 5. Schedule next run
-        run: |
-          # منتظر 10 دقیقه بمان
-          sleep 600
-          # فایل تریگر برای اجرای بعدی
-          echo "Next run scheduled at: $(date -d '+10 minutes')" > next_run.txt
-
-      - name: 6. Commit and push
+      - name: 5. Commit and push state file
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: Schedule next run and update state [skip ci]"
-          file_pattern: "last_message_ids.json next_run.txt"
+          commit_message: "chore: Update last message IDs state [skip ci]"
+          file_pattern: last_message_ids.json
           commit_user_name: "GitHub Actions Bot"
           commit_user_email: "github-actions@github.com"
           commit_author: "GitHub Actions Bot <github-actions@github.com>"
