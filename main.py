@@ -88,12 +88,18 @@ async def main():
                                     
                                 except Exception as e:
                                     print(f"✗ Failed to forward message {message.id}: {e}")
+                                    # حتی در صورت خطا، state رو آپدیت کن تا دوباره تکرار نشه
+                                    last_ids[str_source_id] = message.id
+                                    with open(STATE_FILE, 'w') as f:
+                                        json.dump(last_ids, f)
                             
                             last_ids[str_source_id] = newest_message_id
                             
-                            # ذخیره state بعد از هر کانال
+                            # ذخیره فوری state بعد از هر پیام
+                            last_ids[str_source_id] = message.id
                             with open(STATE_FILE, 'w') as f:
                                 json.dump(last_ids, f)
+                            print(f"State saved: {str_source_id} -> {message.id}")
 
                 except Exception as e:
                     print(f"Error processing channel {channel_input}: {e}")
