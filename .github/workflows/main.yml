@@ -1,0 +1,48 @@
+name: Telegram Forwarder
+
+on:
+  schedule:
+    - cron: '*/10 * * * *' # هر 10 دقیقه یک بار اجرا می‌شود (9 دقیقه کار، 1 دقیقه استراحت تقریبی)
+  workflow_dispatch: # امکان اجرای دستی ورک فلو
+
+jobs:
+  run_forwarder:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9' # یا نسخه‌ای جدیدتر مانند 3.10, 3.11
+
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+
+    - name: Generate Session
+      id: generate_session
+      run: |
+        python -c "import os; from telethon.sync import TelegramClient; api_id = os.environ.get('TG_API_ID'); api_hash = os.environ.get('TG_API_HASH'); client = TelegramClient('session', api_id, api_hash); client.connect(); client.start(); client.disconnect();"
+      env:
+        TG_API_ID: ${{ secrets.TG_API_ID }}
+        TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        TG_PHONE: ${{ secrets.TG_PHONE }} # شماره تلفن شما
+
+    - name: Run Forwarder
+      run: python forwarder.py
+      env:
+        TG_API_ID: ${{ secrets.TG_API_ID }}
+        TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        SOURCE_CHANNELS: ${{ secrets.SOURCE_CHANNELS }} # لیستی از آیدی/یوزرنیم کانال‌های مبدأ
+        DESTINATION_CHANNEL: ${{ secrets.DESTINATION_CHANNEL }} # آیدی/یوزرنیم کانال مقصد
+        SESSION_FILE: session.session # نام فایل سشن
+        TG_PHONE: ${{ secrets.TG_PHONE }} # شماره تلفن شما (برای لاگین اولیه)
+
+    - name: Persist Session File (Optional - Not Recommended for Public Repos)
+      if: always() # همیشه اجرا شود
+      uses: actions/upload-artifact@v4
+      with:
+        name: telethon-session
+        path: session.session
+        retention-days: 1 # فایل سشن بعد از یک روز حذف می‌شود (اختیاری)
