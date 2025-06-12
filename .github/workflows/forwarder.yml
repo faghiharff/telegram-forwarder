@@ -1,0 +1,39 @@
+name: Telegram Message Forwarder
+
+on:
+  workflow_dispatch: # برای اجرای دستی
+  schedule:
+    - cron: '*/10 * * * *' # اجرا هر 10 دقیقه
+
+jobs:
+  forward:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 2. Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 3. Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: 4. Run the forwarder script
+        env:
+          API_ID: ${{ secrets.API_ID }}
+          API_HASH: ${{ secrets.API_HASH }}
+          SESSION_STRING: ${{ secrets.SESSION_STRING }}
+          SOURCE_CHANNELS: ${{ secrets.SOURCE_CHANNELS }}
+          DESTINATION_CHANNEL: ${{ secrets.DESTINATION_CHANNEL }}
+        run: python main.py
+
+      - name: 5. Commit and push state file
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: Update last message IDs state"
+          file_pattern: last_message_ids.json
+          commit_user_name: "GitHub Actions Bot"
+          commit_user_email: "github-actions@github.com"
+          commit_author: "GitHub Actions Bot <github-actions@github.com>"
