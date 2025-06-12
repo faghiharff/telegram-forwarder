@@ -12,7 +12,7 @@ API_HASH = os.environ.get("API_HASH")
 SESSION_STRING = os.environ.get("SESSION_STRING")
 SOURCE_CHANNELS_STR = os.environ.get("SOURCE_CHANNELS")
 DESTINATION_CHANNEL = int(os.environ.get("DESTINATION_CHANNEL"))
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+MY_TOKEN = os.environ.get("MY_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY")  # خودکار در GitHub Actions
 
 # --- تبدیل رشته کانال‌های مبدا به لیست ---
@@ -29,14 +29,14 @@ MAX_RUNTIME = 8 * 60  # 8 دقیقه (کمتر از timeout)
 
 def trigger_next_run():
     """تریگر کردن اجرای بعدی از طریق GitHub API"""
-    if not GITHUB_TOKEN or not GITHUB_REPO:
+    if not MY_TOKEN or not GITHUB_REPO:
         print("GitHub token or repo not available for auto-trigger")
         return
     
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/dispatches"
         headers = {
-            "Authorization": f"token {GITHUB_TOKEN}",
+            "Authorization": f"token {MY_TOKEN}",
             "Accept": "application/vnd.github.v3+json",
             "Content-Type": "application/json"
         }
