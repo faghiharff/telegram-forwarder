@@ -2,19 +2,18 @@ name: Telegram Message Forwarder
 
 on:
   workflow_dispatch:
-  repository_dispatch:
-    types: [run_forwarder]
   schedule:
-    # بک‌آپ cron (اگه کار کرد)
     - cron: '*/10 * * * *'
 
 jobs:
   forward:
     runs-on: ubuntu-latest
-    timeout-minutes: 9  # حداکثر 9 دقیقه اجرا
     
+    # ######################################
+    # ### این بخش را برای حل مشکل اضافه کنید ###
     permissions:
       contents: write
+    # ######################################
 
     steps:
       - name: 1. Checkout repository
@@ -35,14 +34,12 @@ jobs:
           SESSION_STRING: ${{ secrets.SESSION_STRING }}
           SOURCE_CHANNELS: ${{ secrets.SOURCE_CHANNELS }}
           DESTINATION_CHANNEL: ${{ secrets.DESTINATION_CHANNEL }}
-          MY_TOKEN: ${{ secrets.MY_TOKEN }}
-        run: |
-          timeout 540 python main.py || echo "Script completed or timed out"
+        run: python main.py
 
       - name: 5. Commit and push state file
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: Update last message IDs state [skip ci]"
+          commit_message: "chore: Update last message IDs state"
           file_pattern: last_message_ids.json
           commit_user_name: "GitHub Actions Bot"
           commit_user_email: "github-actions@github.com"
