@@ -1,0 +1,12 @@
+name: Test Schedule
+
+on:
+  schedule:
+    - cron: '* * * * *' # هر دقیقه
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print Hello
+        run: echo "Hello from scheduled workflow!"
