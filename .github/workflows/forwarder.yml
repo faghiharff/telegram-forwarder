@@ -35,7 +35,7 @@ jobs:
           SESSION_STRING: ${{ secrets.SESSION_STRING }}
           SOURCE_CHANNELS: ${{ secrets.SOURCE_CHANNELS }}
           DESTINATION_CHANNEL: ${{ secrets.DESTINATION_CHANNEL }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MY_TOKEN: ${{ secrets.MY_TOKEN }}
         run: |
           timeout 540 python main.py || echo "Script completed or timed out"
 
