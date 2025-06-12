@@ -1,13 +1,20 @@
 name: Telegram Message Forwarder
 
 on:
-  workflow_dispatch: # برای اجرای دستی
+  workflow_dispatch:
   schedule:
-    - cron: '*/10 * * * *' # اجرا هر 10 دقیقه
+    - cron: '*/10 * * * *'
 
 jobs:
   forward:
     runs-on: ubuntu-latest
+    
+    # ######################################
+    # ### این بخش را برای حل مشکل اضافه کنید ###
+    permissions:
+      contents: write
+    # ######################################
+
     steps:
       - name: 1. Checkout repository
         uses: actions/checkout@v4
