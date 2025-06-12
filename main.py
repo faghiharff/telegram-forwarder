@@ -2,15 +2,18 @@ import os
 import json
 import asyncio
 import time
+import requests
 from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
 
-# --- خواندن اطلاعات از متغیرهای محیطی (GitHub Secrets) ---
+# --- خواندن اطلاعات از متغیرهای محیطی ---
 API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
 SESSION_STRING = os.environ.get("SESSION_STRING")
 SOURCE_CHANNELS_STR = os.environ.get("SOURCE_CHANNELS")
 DESTINATION_CHANNEL = int(os.environ.get("DESTINATION_CHANNEL"))
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY")  # خودکار در GitHub Actions
 
 # --- تبدیل رشته کانال‌های مبدا به لیست ---
 SOURCE_CHANNELS = []
@@ -22,31 +25,60 @@ for ch in SOURCE_CHANNELS_STR.split(','):
         SOURCE_CHANNELS.append(ch)
 
 STATE_FILE = 'last_message_ids.json'
-MAX_RUNTIME = 9 * 60  # 9 دقیقه به ثانیه
+MAX_RUNTIME = 8 * 60  # 8 دقیقه (کمتر از timeout)
+
+def trigger_next_run():
+    """تریگر کردن اجرای بعدی از طریق GitHub API"""
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        print("GitHub token or repo not available for auto-trigger")
+        return
+    
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/dispatches"
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json"
+        }
+        data = {"event_type": "run_forwarder"}
+        
+        # منتظر 10 دقیقه بمان
+        print("Waiting 10 minutes before triggering next run...")
+        time.sleep(600)  # 10 دقیقه
+        
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 204:
+            print("✓ Next run triggered successfully")
+        else:
+            print(f"✗ Failed to trigger next run: {response.status_code}")
+    except Exception as e:
+        print(f"Error triggering next run: {e}")
 
 async def main():
     start_time = time.time()
     
     async with TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH) as client:
         print("Client created successfully.")
-        print(f"Starting continuous monitoring for {MAX_RUNTIME} seconds...")
+        print(f"Starting monitoring for {MAX_RUNTIME} seconds...")
 
+        # خواندن state
         try:
             with open(STATE_FILE, 'r') as f:
                 last_ids = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             last_ids = {}
+            print("No previous state found, starting fresh.")
 
-        # حلقه اصلی که مداوم اجرا میشه
+        # حلقه اصلی
         while True:
             current_time = time.time()
             
-            # اگر بیشتر از 9 دقیقه گذشته، خروج
+            # چک کردن زمان باقی‌مانده
             if current_time - start_time > MAX_RUNTIME:
-                print("Maximum runtime reached. Exiting...")
+                print("Maximum runtime reached. Saving state and exiting...")
                 break
             
-            print(f"\n=== Checking for new messages (Runtime: {int(current_time - start_time)}s) ===")
+            print(f"\n=== Checking messages (Runtime: {int(current_time - start_time)}s) ===")
             
             messages_processed = 0
             
@@ -54,73 +86,79 @@ async def main():
                 try:
                     source_entity = await client.get_entity(channel_input)
                     str_source_id = str(source_entity.id)
+                    channel_title = getattr(source_entity, 'title', str(channel_input))
                     
                     last_id = last_ids.get(str_source_id, 0)
-                    newest_message_id = last_id
 
                     if last_id == 0:
-                        # اولین بار - فقط آماده سازی
-                        print(f"First time setup for channel: {getattr(source_entity, 'title', channel_input)}")
+                        # اولین بار - تنظیم نقطه شروع
+                        print(f"First setup for: {channel_title}")
                         latest_message = await client.get_messages(source_entity, limit=1)
                         if latest_message:
-                            newest_message_id = latest_message[0].id
-                            last_ids[str_source_id] = newest_message_id
-                            print(f"Set starting point to message ID: {newest_message_id}")
+                            last_ids[str_source_id] = latest_message[0].id
+                            # ذخیره فوری
+                            with open(STATE_FILE, 'w') as f:
+                                json.dump(last_ids, f)
+                            print(f"Set starting point: {latest_message[0].id}")
                     else:
-                        # چک کردن پیام‌های جدید
-                        messages_to_forward = []
+                        # پردازش پیام‌های جدید
+                        new_messages = []
                         async for message in client.iter_messages(source_entity, min_id=last_id, reverse=True):
-                            messages_to_forward.append(message)
-                            if message.id > newest_message_id:
-                                newest_message_id = message.id
+                            new_messages.append(message)
                         
-                        if messages_to_forward:
-                            print(f"Found {len(messages_to_forward)} new message(s) in {getattr(source_entity, 'title', channel_input)}")
+                        if new_messages:
+                            print(f"Found {len(new_messages)} new messages in {channel_title}")
                             
-                            for message in messages_to_forward:
+                            for message in new_messages:
                                 try:
                                     await client.send_message(DESTINATION_CHANNEL, message)
                                     print(f"✓ Forwarded message {message.id}")
                                     messages_processed += 1
                                     
-                                    # فاصله کوتاه بین پیام‌ها
+                                    # ذخیره فوری state بعد از هر پیام
+                                    last_ids[str_source_id] = message.id
+                                    with open(STATE_FILE, 'w') as f:
+                                        json.dump(last_ids, f)
+                                    
+                                    # فاصله کوتاه
                                     await asyncio.sleep(1)
                                     
                                 except Exception as e:
                                     print(f"✗ Failed to forward message {message.id}: {e}")
-                                    # حتی در صورت خطا، state رو آپدیت کن تا دوباره تکرار نشه
+                                    # حتی در صورت خطا، state رو آپدیت کن
                                     last_ids[str_source_id] = message.id
                                     with open(STATE_FILE, 'w') as f:
                                         json.dump(last_ids, f)
-                            
-                            last_ids[str_source_id] = newest_message_id
-                            
-                            # ذخیره فوری state بعد از هر پیام
-                            last_ids[str_source_id] = message.id
-                            with open(STATE_FILE, 'w') as f:
-                                json.dump(last_ids, f)
-                            print(f"State saved: {str_source_id} -> {message.id}")
 
                 except Exception as e:
                     print(f"Error processing channel {channel_input}: {e}")
                     continue
 
             if messages_processed == 0:
-                print("No new messages found in any channel.")
+                print("No new messages found.")
             else:
                 print(f"Total messages processed: {messages_processed}")
             
-            # استراحت 30 ثانیه قبل از چک بعدی
-            print("Waiting 30 seconds before next check...")
+            # چک کردن زمان باقی‌مانده قبل از sleep
+            remaining_time = MAX_RUNTIME - (time.time() - start_time)
+            if remaining_time < 30:
+                print("Not enough time for next cycle, exiting...")
+                break
+            
+            # استراحت 30 ثانیه
+            print("Waiting 30 seconds...")
             await asyncio.sleep(30)
         
         # ذخیره نهایی state
         with open(STATE_FILE, 'w') as f:
             json.dump(last_ids, f)
-        print(f"\nFinal state saved to {STATE_FILE}.")
+        print(f"Final state saved to {STATE_FILE}")
         
         total_runtime = int(time.time() - start_time)
         print(f"Total runtime: {total_runtime} seconds")
+
+    # تریگر کردن اجرای بعدی (خارج از async context)
+    trigger_next_run()
 
 if __name__ == "__main__":
     asyncio.run(main())
